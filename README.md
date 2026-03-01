@@ -4,8 +4,8 @@ Reference implementation of the Dual-Layer Economy (DLE), a stock-flow consisten
 
 This repository contains the exact simulation code used in the DLE working paper.
 DLE_Whitepaper_v2.0.pdf Februar 2026, 
-ssrn-6120808.pdf January 2026 v.1.3.1 and 
-ssrn-5885342 2.pdf December 2025 v1.1.
+ssrn-6120808v.1.3.1.pdf January 2026 v.1.3.1 and 
+ssrn-5885342_v1.1.pdf December 2025 v1.1.
 
 ## Key features
 
