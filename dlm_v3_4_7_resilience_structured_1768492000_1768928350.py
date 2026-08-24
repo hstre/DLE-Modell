@@ -44,6 +44,14 @@ class DLMState:
     ubi_share: float
     State_cash: float
 
+    # Public-money counterpart for the optional NEMO extension.
+    # Yin issuance raises both M_re and this liability; collective reflux
+    # extinguishes both.  Keeping it separate avoids calling issuance
+    # "liability free" in an SFC balance sheet.
+    M_public: float
+    Yin_cum: float
+    Reflux_cum: float
+
     # flags / regime
     jubilee_count: int
     last_jubilee_t: float
@@ -305,6 +313,19 @@ class DLMParams:
     # Public-benefit cap (midway)
     kappa_cap: float = 0.08     # max share of benefit_proxy spent on conversion
     benefit_scale: float = 0.25 # scales benefit proxy into currency
+
+    # -----------------
+    # Optional NEMO / Yin-Yang finance experiment (inactive by default)
+    # -----------------
+    # Share of already-planned commons spending financed by direct,
+    # non-repayable public-money issuance rather than taxes/debt.
+    yin_finance_share: float = 0.0
+
+    # Maximum transaction-burn rate.  The effective rate is weighted by
+    # ecological degradation and physical overshoot.
+    reflux_rate_max: float = 0.0
+    reflux_degradation_weight: float = 0.70
+    reflux_overshoot_weight: float = 0.30
     # -----------------
     # How many claims are minted per unit of SF "real creation" (dA_gross_eff)
     iota_Q: float = 0.35
@@ -350,6 +371,15 @@ def _verify_ledger_window(events: list, since_idx: int, state_prev: dict, state_
     dA = float(state_now.get('A', 0.0) - state_prev.get('A', 0.0))
     if abs(dA - (a_net - a_sink)) > 50*tol:
         warn.append(f"A mismatch (partial): d={dA:.6g}, logged={(a_net - a_sink):.6g}")
+    # --- PUBLIC MONEY COUNTERPART (optional NEMO extension) ---
+    yin_issue = sum_kind('YIN_ISSUE')
+    reflux_burn = sum_kind('REFLUX_BURN')
+    d_public = float(state_now.get('M_public', 0.0) - state_prev.get('M_public', 0.0))
+    if abs(d_public - (yin_issue - reflux_burn)) > 10*tol:
+        warn.append(
+            f"M_PUBLIC mismatch: d={d_public:.6g}, "
+            f"logged={(yin_issue - reflux_burn):.6g}"
+        )
     return warn
 
 # ============================================================
@@ -633,6 +663,7 @@ def simulate_recovery_regime_v1_3_compute_claims(
     # initial conditions
     R0=600.0, M_re0=550.0, M_sf0=40.0, SF_settle0=50.0, K_settle0=80.0, L_re0=500.0, L_sf0=80.0, B0=200.0, A0=100.0, S0=0.8, Z0=0.0,
     Kc0=120.0, E_soft0=0.0, Q_good0=0.0, Q_bad0=0.0, H0=0.0,
+    M_public0=None, Yin_cum0=0.0, Reflux_cum0=0.0,
     # policy
     tau_sf_stock_init=0.005, tau_vat_init=0.08,
     B_guard=4000.0,
@@ -695,6 +726,9 @@ def simulate_recovery_regime_v1_3_compute_claims(
         tau_ubi=0.0,
         ubi_share=float(p.ubi_base),
         State_cash=0.0,
+        M_public=float(M_re0 if M_public0 is None else M_public0),
+        Yin_cum=float(Yin_cum0),
+        Reflux_cum=float(Reflux_cum0),
         jubilee_count=0,
         last_jubilee_t=-1e9,
         regime=0,
@@ -707,7 +741,12 @@ def simulate_recovery_regime_v1_3_compute_claims(
     ledger_events = [] if p.enable_ledger_log else None
     _log_event(ledger_events, 'SYSTEM', 'INIT', 0.0, amount=0.0, meta={'version':'v3.4.6'}, max_events=p.max_ledger_events)
     last_snapshot_event_idx = 0
-    last_snapshot_state = {'State_cash': float(getattr(st, 'State_cash', 0.0)), 'K_settle': float(getattr(st, 'K_settle', 0.0)), 'A': float(getattr(st, 'A', 0.0))}
+    last_snapshot_state = {
+        'State_cash': float(getattr(st, 'State_cash', 0.0)),
+        'K_settle': float(getattr(st, 'K_settle', 0.0)),
+        'A': float(getattr(st, 'A', 0.0)),
+        'M_public': float(getattr(st, 'M_public', 0.0)),
+    }
     for k in range(steps + 1):
         t = k * p.dt
 
@@ -893,6 +932,20 @@ def simulate_recovery_regime_v1_3_compute_claims(
         UBI = st.ubi_share * T_sf_base
         I_pub = s_ratio * T_sf_base
 
+        # Optional Yin issuance: finance a share of already-planned commons
+        # activity without creating repayment debt.  The real activity is not
+        # increased here; this isolates the financing-mechanism effect.
+        commons_spend = I_pub + I_maint + I_rebuild
+        Yin = float(np.clip(p.yin_finance_share, 0.0, 1.0) * max(0.0, commons_spend))
+        yin_issued = Yin * p.dt
+        st.M_public += yin_issued
+        st.Yin_cum += yin_issued
+        _log_event(
+            ledger_events, 'PUBLIC_MONEY', 'YIN_ISSUE', t,
+            amount=yin_issued, meta={'use': 'commons'},
+            max_events=p.max_ledger_events
+        )
+
         # Demurrage
         T_dem = p.delta_dem * st.M_re
 
@@ -963,9 +1016,38 @@ def simulate_recovery_regime_v1_3_compute_claims(
         T_VAT = st.tau_vat * C_gross
         C_net = max(0.0, C_gross - T_VAT)
 
+        # Optional Collective Reflux: ecological-impact-weighted destruction
+        # of transaction money.  It is a burn, not state revenue.
+        degradation = float(np.clip(1.0 - st.S, 0.0, 1.0))
+        overshoot = float(np.clip(
+            max(0.0, st.R - p.carrying_capacity) / max(p.carrying_capacity, 1e-9),
+            0.0, 1.0
+        ))
+        impact_weight = float(np.clip(
+            p.reflux_degradation_weight * degradation
+            + p.reflux_overshoot_weight * overshoot,
+            0.0, 1.0
+        ))
+        reflux_rate = float(max(0.0, p.reflux_rate_max) * impact_weight)
+        reflux_due = max(0.0, reflux_rate * C_gross * p.dt)
+
+        # Burn cannot exceed the public-money liability or the RE money held
+        # before the current-period issue/ordinary flows are settled.
+        money_available = max(0.0, st.M_re + yin_issued)
+        reflux_paid = float(min(reflux_due, st.M_public, money_available))
+        T_reflux = reflux_paid / p.dt
+        st.M_public = max(0.0, st.M_public - reflux_paid)
+        st.Reflux_cum += reflux_paid
+        _log_event(
+            ledger_events, 'PUBLIC_MONEY', 'REFLUX_BURN', t,
+            amount=reflux_paid,
+            meta={'impact_weight': impact_weight, 'effective_rate': reflux_rate},
+            max_events=p.max_ledger_events
+        )
+
         # Deficit (ex sink). Note: conversion spending X_conv is funded from SF revenues (already netted out of T_sf_base),
         # so we do not add it as a separate spending line here.
-        Def = (G0 + UBI + I_pub + I_maint + I_rebuild) - (SF_tax_paid_rate + T_dem + T_VAT + T_pi)
+        Def = (G0 + UBI + I_pub + I_maint + I_rebuild) - (SF_tax_paid_rate + T_dem + T_VAT + T_pi + Yin)
 
         # VAT controller update
         st.tau_vat, vat_cap = vat_controller(st.tau_vat, stress, Def, b, w_gap, p)
@@ -986,20 +1068,26 @@ def simulate_recovery_regime_v1_3_compute_claims(
         st.B = max(0.0, st.B + (Def - T_sink) * p.dt)
 
         # Money update
-        dM = (W + UBI) - (C_net + T_VAT + T_dem)
+        dM = (W + UBI + Yin) - (C_net + T_VAT + T_dem + T_reflux)
         st.M_re = max(0.0, st.M_re + dM * p.dt)
         _guard(abs(re_to_sf_flow) <= 1e-12, 'Invariant violated: RE→SF money flow detected', p.guard_mode)
         if p.enable_ledger_log and (k % p.sample_every == 0):
             # v3.4.4: verify ledger window since last snapshot
-            now_state = {'State_cash': float(getattr(st, 'State_cash', 0.0)), 'K_settle': float(getattr(st, 'K_settle', 0.0)), 'A': float(getattr(st, 'A', 0.0))}
+            now_state = {
+                'State_cash': float(getattr(st, 'State_cash', 0.0)),
+                'K_settle': float(getattr(st, 'K_settle', 0.0)),
+                'A': float(getattr(st, 'A', 0.0)),
+                'M_public': float(getattr(st, 'M_public', 0.0)),
+            }
             warn = _verify_ledger_window(ledger_events, last_snapshot_event_idx, last_snapshot_state, now_state)
             for w in warn:
                 _log_event(ledger_events, 'SYSTEM', 'VERIFY_WARN', t, amount=0.0, meta={'msg': w}, max_events=p.max_ledger_events)
             last_snapshot_event_idx = len(ledger_events)
             last_snapshot_state = now_state
             _log_event(ledger_events, 'SYSTEM', 'SNAPSHOT', t, amount=0.0,
-                      meta={'R': float(st.R), 'A': float(getattr(st,'A',0.0)), 'B': float(st.B), 'M_re': float(getattr(st,'M',0.0)),
-                            'K_settle': float(getattr(st,'K_settle',0.0)), 'Z': float(getattr(st,'Z',0.0))},
+                      meta={'R': float(st.R), 'A': float(getattr(st,'A',0.0)), 'B': float(st.B), 'M_re': float(st.M_re),
+                            'K_settle': float(getattr(st,'K_settle',0.0)), 'Z': float(getattr(st,'Z',0.0)),
+                            'M_public': float(st.M_public)},
                       max_events=p.max_ledger_events)
 
         if k % p.sample_every == 0:
@@ -1011,6 +1099,8 @@ def simulate_recovery_regime_v1_3_compute_claims(
                 st.L_re, st.L_sf,
                 st.A, st.M_re, st.M_sf, st.SF_settle, st.K_settle, st.State_cash, st.B, b,
                 Def, st.tau_vat, vat_cap,
+                commons_spend, Yin, st.Yin_cum,
+                impact_weight, reflux_rate, T_reflux, st.Reflux_cum, st.M_public,
                 st.tau_sink, T_sink,
                 st.tau_sf_stock, st.tau_ubi,
                 st.ubi_share, UBI,
@@ -1037,6 +1127,8 @@ def simulate_recovery_regime_v1_3_compute_claims(
         "L_re", "L_sf",
         "A", "M_re", "M_sf", "SF_settle", "K_settle", "State_cash", "B", "b",
         "Def", "tau_vat", "vat_cap",
+        "commons_spend", "Yin", "Yin_cum",
+        "impact_weight", "reflux_rate", "T_reflux", "Reflux_cum", "M_public",
         "tau_sink", "T_sink",
         "tau_sf_stock", "tau_ubi",
         "ubi_share", "UBI",
@@ -1078,6 +1170,9 @@ def summarize_run(df: pd.DataFrame) -> dict:
         "score_end": float(df["score"].iloc[-1]),
         "selectivity_end": float(df["selectivity"].iloc[-1]),
         "H_thicket_end": float(df["H_thicket"].iloc[-1]),
+        "M_public_end": float(df["M_public"].iloc[-1]),
+        "Yin_cum": float(df["Yin_cum"].iloc[-1]),
+        "Reflux_cum": float(df["Reflux_cum"].iloc[-1]),
     }
 
 

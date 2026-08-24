@@ -1,0 +1,112 @@
+{
+  "paired": [
+    {
+      "scenario": "Reflux 2% max",
+      "metric": "min_R_over_R0",
+      "preferred_direction": "higher",
+      "median_delta": 0.005282085334421746,
+      "p05_delta": -0.0010843995974079625,
+      "p95_delta": 0.030158342971335125,
+      "win_share": 0.94
+    },
+    {
+      "scenario": "Reflux 2% max",
+      "metric": "final_R_over_R0",
+      "preferred_direction": "higher",
+      "median_delta": -0.00017686988707760198,
+      "p05_delta": -0.2761964917349755,
+      "p95_delta": 0.15051642006472046,
+      "win_share": 0.4
+    },
+    {
+      "scenario": "Reflux 2% max",
+      "metric": "max_B",
+      "preferred_direction": "lower",
+      "median_delta": 467.4076076490703,
+      "p05_delta": 109.0960918914804,
+      "p95_delta": 1370.3234055263886,
+      "win_share": 0.02
+    },
+    {
+      "scenario": "Reflux 2% max",
+      "metric": "stress_share",
+      "preferred_direction": "lower",
+      "median_delta": 0.1557377049180328,
+      "p05_delta": 0.02008196721311478,
+      "p95_delta": 0.36407103825136605,
+      "win_share": 0.04
+    },
+    {
+      "scenario": "Yin 5%",
+      "metric": "min_R_over_R0",
+      "preferred_direction": "higher",
+      "median_delta": 0.0005277168399936832,
+      "p05_delta": -0.036141622584655655,
+      "p95_delta": 0.0038990866466301886,
+      "win_share": 0.54
+    },
+    {
+      "scenario": "Yin 5%",
+      "metric": "final_R_over_R0",
+      "preferred_direction": "higher",
+      "median_delta": -0.08455498421686714,
+      "p05_delta": -0.4458600029294866,
+      "p95_delta": 0.14516017053989755,
+      "win_share": 0.32
+    },
+    {
+      "scenario": "Yin 5%",
+      "metric": "max_B",
+      "preferred_direction": "lower",
+      "median_delta": -928.615162847831,
+      "p05_delta": -1338.0943878561775,
+      "p95_delta": -264.7945893130203,
+      "win_share": 0.98
+    },
+    {
+      "scenario": "Yin 5%",
+      "metric": "stress_share",
+      "preferred_direction": "lower",
+      "median_delta": -0.06420765027322409,
+      "p05_delta": -0.2938524590163935,
+      "p95_delta": 0.11256830601092889,
+      "win_share": 0.7
+    },
+    {
+      "scenario": "Yin 5% + reflux 2%",
+      "metric": "min_R_over_R0",
+      "preferred_direction": "higher",
+      "median_delta": 0.0015187480973200412,
+      "p05_delta": -0.025936373938746378,
+      "p95_delta": 0.008777060106326855,
+      "win_share": 0.58
+    },
+    {
+      "scenario": "Yin 5% + reflux 2%",
+      "metric": "final_R_over_R0",
+      "preferred_direction": "higher",
+      "median_delta": -4.412668742070913e-07,
+      "p05_delta": -0.32203274537980686,
+      "p95_delta": 0.20185899806013702,
+      "win_share": 0.46
+    },
+    {
+      "scenario": "Yin 5% + reflux 2%",
+      "metric": "max_B",
+      "preferred_direction": "lower",
+      "median_delta": -680.8439599515488,
+      "p05_delta": -1109.0566692279208,
+      "p95_delta": -167.58544138817817,
+      "win_share": 1.0
+    },
+    {
+      "scenario": "Yin 5% + reflux 2%",
+      "metric": "stress_share",
+      "preferred_direction": "lower",
+      "median_delta": -0.08333333333333331,
+      "p05_delta": -0.2814207650273225,
+      "p95_delta": 0.1124316939890709,
+      "win_share": 0.8
+    }
+  ]
+}
